@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Chart Evidence Extractor — Clinical NLP POC</title>
+<style>
+  :root{
+    --bg:#12181C;
+    --panel:#1A2227;
+    --panel-2:#202A30;
+    --line:#2C383F;
+    --teal:#4FD1C5;
+    --teal-dim:#1E5C55;
+    --amber:#F0B429;
+    --amber-dim:#5C4212;
+    --coral:#E2725B;
+    --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:#E7EDEF;
+    font-family:'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:40px 28px 80px;}
+  header{margin-bottom:24px;}
+  .eyebrow{
+    font-family:var(--mono);
+    font-size:12px;
+    letter-spacing:.12em;
+    text-transform:uppercase;
+    color:var(--teal);
+    margin:0 0 10px;
+  }
+  h1{font-size:30px;font-weight:600;margin:0 0 8px;letter-spacing:-0.01em;}
+  .sub{color:#8FA3AB;font-size:15px;max-width:680px;line-height:1.55;margin:0;}
+
+  .modebar{display:flex;gap:10px;margin:22px 0 0;flex-wrap:wrap;align-items:center;}
+  button.mode{
+    font-family:var(--mono);font-size:12.5px;
+    background:var(--panel);border:1px solid var(--line);color:#8FA3AB;
+    padding:9px 16px;border-radius:7px;cursor:pointer;transition:.15s;
+  }
+  button.mode.active{border-color:var(--teal);color:var(--teal);background:var(--teal-dim);}
+  button.mode:hover{border-color:var(--teal);color:var(--teal);}
+
+  .keyrow{
+    display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap;
+  }
+  input.key{
+    flex:1;min-width:260px;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:7px;
+    color:#E7EDEF;font-family:var(--mono);font-size:12.5px;padding:9px 12px;
+  }
+  input.key:focus{outline:none;border-color:var(--teal);}
+  .keynote{font-size:11.5px;color:#8FA3AB;line-height:1.5;max-width:640px;margin-top:6px;}
+  .keynote a{color:var(--teal);}
+
+  .samples{display:flex;gap:10px;margin:16px 0 0;flex-wrap:wrap;}
+  button.sample{
+    font-family:var(--mono);font-size:12.5px;background:transparent;
+    border:1px solid var(--line);color:#8FA3AB;padding:8px 14px;border-radius:6px;cursor:pointer;transition:.15s;
+  }
+  button.sample:hover{border-color:var(--teal);color:var(--teal);}
+
+  .grid{display:grid;grid-template-columns:1.15fr .85fr;gap:18px;margin-top:24px;}
+  @media(max-width:880px){.grid{grid-template-columns:1fr;}}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:20px;}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:.1em;color:#8FA3AB;margin:0 0 14px;font-weight:600;}
+
+  textarea{
+    width:100%;min-height:240px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+    color:#E7EDEF;font-family:var(--mono);font-size:13.5px;line-height:1.65;padding:14px;resize:vertical;
+  }
+  textarea:focus{outline:none;border-color:var(--teal);}
+
+  .runbar{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap;}
+  button.run{
+    background:var(--teal);color:#08211E;border:none;font-weight:600;font-size:13.5px;
+    padding:10px 20px;border-radius:7px;cursor:pointer;
+  }
+  button.run:hover{opacity:.9;}
+  button.run:disabled{opacity:.5;cursor:not-allowed;}
+  .stat{font-family:var(--mono);font-size:12.5px;color:#8FA3AB;}
+  .error{font-family:var(--mono);font-size:12.5px;color:var(--coral);}
+
+  .note-out{
+    background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:16px;
+    font-family:var(--mono);font-size:13.5px;line-height:1.9;white-space:pre-wrap;min-height:240px;
+  }
+  mark{padding:1px 3px;border-radius:3px;color:#08211E;font-weight:600;}
+  mark.dx{background:var(--teal);}
+  mark.rx{background:#B8A6F2;}
+  mark.proc{background:#8FD0F0;}
+  mark.flag{background:var(--amber);}
+  sup.cite{font-family:var(--mono);font-size:10px;color:#8FA3AB;margin-left:1px;}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;font-size:12px;color:#8FA3AB;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:9px;height:9px;border-radius:2px;display:inline-block;}
+
+  .findings{display:flex;flex-direction:column;gap:10px;max-height:520px;overflow:auto;}
+  .finding{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:var(--panel-2);}
+  .finding .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;}
+  .finding .term{font-weight:600;font-size:14px;}
+  .finding .type{font-family:var(--mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:#8FA3AB;}
+  .finding .evidence{
+    margin-top:6px;font-size:12.5px;color:#8FA3AB;font-family:var(--mono);line-height:1.55;
+    border-left:2px solid var(--teal-dim);padding-left:10px;
+  }
+  .finding.warn{border-color:var(--amber-dim);}
+  .finding.warn .evidence{border-left-color:var(--amber-dim);}
+  .finding.discard{border-color:#4A2A2A;opacity:.75;}
+  .finding.discard .evidence{border-left-color:#4A2A2A;}
+  .badge{
+    display:inline-block;font-family:var(--mono);font-size:10px;color:var(--amber);
+    background:var(--amber-dim);padding:2px 6px;border-radius:4px;margin-top:8px;margin-right:6px;
+  }
+  .badge.bad{color:var(--coral);background:#3A1F1B;}
+  .empty{color:#8FA3AB;font-size:13px;padding:30px 6px;text-align:center;}
+
+  .groundbar{
+    margin-top:14px;font-family:var(--mono);font-size:12px;color:#8FA3AB;
+    border-top:1px solid var(--line);padding-top:12px;
+  }
+
+  footer{margin-top:30px;color:#8FA3AB;font-size:12px;line-height:1.6;border-top:1px solid var(--line);padding-top:16px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Cotiviti Intern Assessment — Hackathon POC</p>
+    <h1>Chart evidence extractor</h1>
+    <p class="sub">Paste an unstructured chart note and extract diagnoses, procedures, and medications, each grounded in the exact sentence it came from. Two extraction engines: an offline keyword baseline, and a live Claude API call that returns cited findings and gets automatically checked against the source text.</p>
+
+    <div class="modebar">
+      <button class="mode active" id="mode-rule" onclick="setMode('rule')">Rule-based (offline)</button>
+      <button class="mode" id="mode-llm" onclick="setMode('llm')">LLM (RAG-grounded)</button>
+    </div>
+
+    <div id="keyPanel" style="display:none;">
+      <div class="modebar" style="margin-top:0;">
+        <button class="mode active" id="prov-claude" onclick="setProvider('claude')">Claude (Anthropic)</button>
+        <button class="mode" id="prov-gemini" onclick="setProvider('gemini')">Gemini (Google, free tier)</button>
+      </div>
+      <div class="keyrow">
+        <input class="key" id="apiKey" type="password" placeholder="sk-ant-... (your Anthropic API key)" />
+      </div>
+      <p class="keynote" id="keyNote">Calls the Claude API directly from this page using <a href="https://simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access/" target="_blank" rel="noopener">Anthropic's documented browser-access header</a> — a bring-your-own-key pattern for demos. Your key stays in this tab and is sent only to api.anthropic.com; it is never stored or sent anywhere else. Get a key (new accounts include a small free credit) at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
+    </div>
+
+    <div class="samples">
+      <button class="sample" onclick="loadSample(1)">Load sample — DRG chart note</button>
+      <button class="sample" onclick="loadSample(2)">Load sample — uncertain diagnosis note</button>
+      <button class="sample" onclick="clearNote()">Clear</button>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Chart note (synthetic / not real PHI)</h2>
+      <textarea id="input" placeholder="Paste or type a clinical note here..."></textarea>
+      <div class="runbar">
+        <button class="run" id="runBtn" onclick="runExtraction()">Extract evidence</button>
+        <span class="stat" id="stat"></span>
+        <span class="error" id="err"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Extracted findings</h2>
+      <div class="findings" id="findings">
+        <div class="empty">Run extraction to see grounded findings here.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:18px;">
+    <h2>Highlighted note</h2>
+    <div class="note-out" id="highlighted">Nothing extracted yet.</div>
+    <div class="legend">
+      <span><span class="dot" style="background:var(--teal)"></span>Diagnosis</span>
+      <span><span class="dot" style="background:#8FD0F0"></span>Procedure</span>
+      <span><span class="dot" style="background:#B8A6F2"></span>Medication</span>
+      <span><span class="dot" style="background:var(--amber)"></span>Documentation qualifier</span>
+    </div>
+    <div class="groundbar" id="groundbar"></div>
+  </div>
+
+  <div class="card" id="debugCard" style="margin-top:18px; display:none;">
+    <h2>Raw model response (shown because parsing failed)</h2>
+    <div class="note-out" id="debugRaw" style="white-space:pre-wrap;"></div>
+  </div>
+
+  <footer>
+    Rule-based mode uses lexicon matching, kept as a fast offline baseline. LLM mode sends the note to Claude (<code>claude-sonnet-4-6</code>) or Gemini (<code>gemini-3.6-flash</code>, free tier) with instructions to return only findings quoted verbatim from the note; every returned sentence is then checked against the source text client-side, and anything not found verbatim is discarded and shown separately rather than trusted. That verify-before-trust step is the same grounding pattern the accompanying report recommends scaling into production chart review. Sample notes are synthetic and contain no real patient information.
+  </footer>
+</div>
+
+<script>
+const LEXICON = {
+  dx: ["type 2 diabetes","type 2 diabetes mellitus","hypertension","acute kidney injury","community-acquired pneumonia","pneumonia","sepsis","copd exacerbation","chronic obstructive pulmonary disease","congestive heart failure","heart failure","atrial fibrillation","acute respiratory failure","urinary tract infection","cellulitis","deep vein thrombosis"],
+  proc: ["cardiac catheterization","appendectomy","colonoscopy","central line placement","intubation","chest tube placement","hemodialysis","bronchoscopy"],
+  rx: ["metformin","lisinopril","vancomycin","furosemide","insulin","albuterol","heparin","piperacillin-tazobactam","amiodarone"],
+};
+const QUALIFIERS = ["possible","probable","suspected","rule out","r/o","history of","likely","unlikely","resolved","questionable"];
+const TYPE_MAP = { diagnosis:"dx", procedure:"proc", medication:"rx" };
+const TYPE_LABEL = { dx:"Diagnosis", proc:"Procedure", rx:"Medication" };
+
+let mode = 'rule';
+let provider = 'claude';
+
+const PROVIDER_COPY = {
+  claude: {
+    placeholder: 'sk-ant-... (your Anthropic API key)',
+    note: `Calls the Claude API directly from this page using <a href="https://simonwillison.net/2024/Aug/23/anthropic-dangerous-direct-browser-access/" target="_blank" rel="noopener">Anthropic's documented browser-access header</a> — a bring-your-own-key pattern for demos. Your key stays in this tab and is sent only to api.anthropic.com; it is never stored or sent anywhere else. Get a key (new accounts include a small free credit) at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.`,
+  },
+  gemini: {
+    placeholder: 'AIza... (your Google Gemini API key)',
+    note: `Calls the Gemini API directly from this page. Google's Gemini free tier requires no credit card and is ongoing (rate-limited), not just a trial. Your key stays in this tab and is sent only to generativelanguage.googleapis.com. Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a>.`,
+  },
+};
+
+function setMode(m){
+  mode = m;
+  document.getElementById('mode-rule').classList.toggle('active', m==='rule');
+  document.getElementById('mode-llm').classList.toggle('active', m==='llm');
+  document.getElementById('keyPanel').style.display = m==='llm' ? 'block' : 'none';
+  document.getElementById('runBtn').textContent = m==='llm' ? 'Extract with ' + (provider==='claude'?'Claude':'Gemini') : 'Extract evidence';
+}
+
+function setProvider(p){
+  provider = p;
+  document.getElementById('prov-claude').classList.toggle('active', p==='claude');
+  document.getElementById('prov-gemini').classList.toggle('active', p==='gemini');
+  document.getElementById('apiKey').placeholder = PROVIDER_COPY[p].placeholder;
+  document.getElementById('keyNote').innerHTML = PROVIDER_COPY[p].note;
+  if(mode === 'llm') document.getElementById('runBtn').textContent = 'Extract with ' + (p==='claude'?'Claude':'Gemini');
+}
+
+function escapeRegex(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+const SAMPLE_POOL = {
+  1: [
+    `Patient admitted with community-acquired pneumonia and acute respiratory failure requiring supplemental oxygen. History of type 2 diabetes mellitus, managed on metformin and insulin. Blood pressure elevated on admission, consistent with hypertension, treated with lisinopril. Sputum culture grew organisms sensitive to piperacillin-tazobactam. Chest x-ray findings and clinical course support the diagnosis of community-acquired pneumonia as principal diagnosis. No procedures performed during this admission beyond routine respiratory support.`,
+    `Patient underwent elective colonoscopy for screening; findings were unremarkable aside from two small polyps removed during the procedure. History of hypertension, well controlled on lisinopril. Patient also carries a diagnosis of type 2 diabetes, managed on metformin, with stable glucose readings throughout admission. No acute complications noted post-procedure; discharged same day with routine follow-up instructions.`,
+    `Patient admitted for exacerbation of congestive heart failure with worsening dyspnea and lower extremity edema. Treated with furosemide with good diuretic response. History of atrial fibrillation, rate-controlled on amiodarone. Chest x-ray consistent with pulmonary edema on admission, improved on repeat imaging prior to discharge. No procedures performed; managed medically throughout the stay.`,
+    `Patient underwent elective cardiac catheterization for evaluation of stable angina; no significant coronary blockages identified. History of hypertension, managed on lisinopril. Patient also has a history of type 2 diabetes mellitus, well controlled on metformin. Recovered without complication and discharged the same day with cardiology follow-up scheduled.`,
+    `Patient admitted with acute exacerbation of chronic obstructive pulmonary disease, treated with albuterol nebulizers and a short course of steroids. History of hypertension, on lisinopril. Urinary tract infection identified on admission labs and treated with a course of antibiotics. Clinical course improved steadily; no procedures performed during this admission.`,
+    `Patient underwent appendectomy for acute appendicitis confirmed on imaging; procedure completed without complication. History of type 2 diabetes mellitus, managed on insulin, with glucose closely monitored perioperatively. No cardiac or pulmonary complications noted. Discharged on postoperative day two in stable condition.`,
+  ],
+  2: [
+    `Patient presents with possible sepsis versus urinary tract infection; vancomycin started empirically pending cultures. History of congestive heart failure, currently stable, continues furosemide. Suspected acute kidney injury noted on labs, likely prerenal given hypotension on presentation. Cardiology consulted; probable atrial fibrillation with rapid ventricular rate, amiodarone administered. Central line placement performed for hemodynamic monitoring. Diagnoses remain unconfirmed pending further workup and should be reviewed before final coding.`,
+    `Patient with possible community-acquired pneumonia versus aspiration pneumonitis, started on piperacillin-tazobactam empirically. History of chronic obstructive pulmonary disease, on albuterol as needed. Suspected exacerbation triggered by recent upper respiratory illness, though findings are questionable given equivocal imaging. Rule out heart failure as a contributing factor; furosemide held pending further evaluation. Bronchoscopy considered but not yet performed.`,
+    `Patient evaluated for suspected deep vein thrombosis in the left lower extremity; heparin started empirically pending confirmatory ultrasound. History of type 2 diabetes, poorly controlled, on insulin. Possible cellulitis of the same limb noted on exam, though findings are likely overlapping with venous stasis changes. Probable contribution from resolved prior DVT is being considered. Diagnoses to be finalized after vascular consult.`,
+    `Patient presents with likely atrial fibrillation with rapid ventricular rate, though telemetry findings remain questionable pending formal cardiology read; amiodarone started empirically. History of hypertension, on lisinopril. Rule out acute kidney injury given mildly elevated creatinine, possibly related to recent contrast exposure. Suspected early heart failure noted on exam; furosemide held pending echocardiogram.`,
+    `Patient with probable acute cholecystitis, though imaging findings are somewhat equivocal; broad-spectrum antibiotics including piperacillin-tazobactam started empirically pending surgical consult. History of type 2 diabetes mellitus, managed on metformin. Possible early sepsis suspected given borderline vital signs. Bronchoscopy not indicated; case remains under evaluation before any procedure is scheduled.`,
+    `Patient evaluated for suspected community-acquired pneumonia versus resolved viral illness; findings on exam are likely mild and clinical significance is questionable. History of congestive heart failure, currently stable, continues furosemide. Possible urinary tract infection noted on labs, though culture results are pending. Diagnoses remain unconfirmed and should be reviewed carefully before final coding.`,
+  ],
+};
+let lastSampleShown = {};
+
+function loadSample(n){
+  const pool = SAMPLE_POOL[n];
+  let idx = Math.floor(Math.random() * pool.length);
+  if(pool.length > 1){
+    while(idx === lastSampleShown[n]) idx = Math.floor(Math.random() * pool.length);
+  }
+  lastSampleShown[n] = idx;
+  document.getElementById('input').value = pool[idx];
+  resetOutputs();
+}
+
+function clearNote(){
+  document.getElementById('input').value = '';
+  resetOutputs();
+}
+
+function resetOutputs(){
+  document.getElementById('highlighted').textContent = 'Nothing extracted yet.';
+  document.getElementById('findings').innerHTML = '<div class="empty">Run extraction to see grounded findings here.</div>';
+  document.getElementById('stat').textContent = '';
+  document.getElementById('err').textContent = '';
+  document.getElementById('groundbar').textContent = '';
+  document.getElementById('debugCard').style.display = 'none';
+  document.getElementById('debugRaw').textContent = '';
+}
+
+function splitSentences(text){
+  return text.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [text];
+}
+
+function runExtraction(){
+  const text = document.getElementById('input').value.trim();
+  document.getElementById('err').textContent = '';
+  if(!text){ resetOutputs(); return; }
+  if(mode === 'rule'){
+    renderMatches(ruleBasedExtract(text), text);
+  } else {
+    if(provider === 'claude') runClaudeExtraction(text);
+    else runGeminiExtraction(text);
+  }
+}
+
+function ruleBasedExtract(text){
+  const sentences = splitSentences(text);
+  const matches = [];
+  function findAll(list, cls, typeLabel){
+    list.forEach(term => {
+      const re = new RegExp('\\b' + escapeRegex(term) + '\\b', 'gi');
+      let m;
+      while((m = re.exec(text)) !== null){
+        const sentence = sentences.find(s => s.includes(m[0])) || '';
+        const qualifier = QUALIFIERS.find(q => sentence.toLowerCase().includes(q));
+        matches.push({start:m.index, end:m.index + m[0].length, text:m[0], cls, typeLabel, sentence: sentence.trim(), qualifier, grounded:true});
+      }
+    });
+  }
+  findAll(LEXICON.dx, 'dx', 'Diagnosis');
+  findAll(LEXICON.proc, 'proc', 'Procedure');
+  findAll(LEXICON.rx, 'rx', 'Medication');
+  matches.sort((a,b) => a.start - b.start);
+  return matches;
+}
+
+async function runClaudeExtraction(text){
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const runBtn = document.getElementById('runBtn');
+  const errEl = document.getElementById('err');
+  const statEl = document.getElementById('stat');
+  if(!apiKey){
+    errEl.textContent = 'Enter an Anthropic API key above to use Claude mode.';
+    return;
+  }
+  runBtn.disabled = true;
+  statEl.textContent = 'Calling Claude...';
+
+  const systemPrompt = buildSystemPrompt();
+
+  try{
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages: [{ role: "user", content: text }],
+      }),
+    });
+    const data = await response.json();
+    if(data.error){
+      errEl.textContent = 'API error: ' + data.error.message;
+      statEl.textContent = '';
+      runBtn.disabled = false;
+      return;
+    }
+    const raw = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+    finishLLMExtraction(raw, text, runBtn, errEl, statEl);
+  } catch(e){
+    errEl.textContent = 'Request failed: ' + e.message;
+    statEl.textContent = '';
+    runBtn.disabled = false;
+  }
+}
+
+async function runGeminiExtraction(text){
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const runBtn = document.getElementById('runBtn');
+  const errEl = document.getElementById('err');
+  const statEl = document.getElementById('stat');
+  if(!apiKey){
+    errEl.textContent = 'Enter a Google Gemini API key above to use Gemini mode.';
+    return;
+  }
+  runBtn.disabled = true;
+  statEl.textContent = 'Calling Gemini...';
+
+  const systemPrompt = buildSystemPrompt();
+
+  try{
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: text }] }],
+        generationConfig: {
+          maxOutputTokens: 4096,
+          responseMimeType: "application/json",
+          thinkingConfig: { thinkingLevel: "low" },
+        },
+      }),
+    });
+    const data = await response.json();
+    if(data.error){
+      errEl.textContent = 'API error: ' + data.error.message;
+      statEl.textContent = '';
+      runBtn.disabled = false;
+      return;
+    }
+    const candidate = (data.candidates||[])[0];
+    if(!candidate){
+      errEl.textContent = 'Gemini returned no candidates (possibly blocked or empty response).';
+      statEl.textContent = '';
+      runBtn.disabled = false;
+      return;
+    }
+    if(candidate.finishReason && candidate.finishReason !== 'STOP'){
+      errEl.textContent = 'Gemini stopped early (' + candidate.finishReason + '). Try a shorter note or click Extract again.';
+    }
+    const truncated = candidate.finishReason === 'MAX_TOKENS';
+    const raw = ((candidate.content && candidate.content.parts) || []).map(p => p.text||'').join('\n').trim();
+    finishLLMExtraction(raw, text, runBtn, errEl, statEl, truncated);
+  } catch(e){
+    errEl.textContent = 'Request failed: ' + e.message;
+    statEl.textContent = '';
+    runBtn.disabled = false;
+  }
+}
+
+function buildSystemPrompt(){
+  return `You are a clinical chart extraction engine for a healthcare payment-integrity workflow. Extract only diagnoses, procedures, and medications explicitly mentioned in the note below. For each finding return the exact verbatim sentence from the note it appears in, copied character-for-character with no paraphrasing. If the sentence contains uncertainty language (for example: possible, probable, suspected, rule out, r/o, history of, likely, unlikely, resolved, questionable), set qualifier to that word or phrase, otherwise null. Respond with strict JSON only, no prose, no markdown fences: an array of objects with keys term, type (one of "diagnosis","procedure","medication"), sentence, qualifier.`;
+}
+
+function extractJsonArray(raw){
+  const cleaned = raw.replace(/^```json/i, '').replace(/^```/i, '').replace(/```$/, '').trim();
+
+  function coerce(parsed){
+    if(Array.isArray(parsed)) return parsed;
+    if(parsed && typeof parsed === 'object'){
+      // model wrapped the array in an object, e.g. {"findings": [...]}
+      const arrVal = Object.values(parsed).find(v => Array.isArray(v));
+      if(arrVal) return arrVal;
+    }
+    return null;
+  }
+
+  try{ const r = coerce(JSON.parse(cleaned)); if(r) return r; } catch(e){}
+
+  // fallback: pull out the substring between the first [ and the last ]
+  const start = cleaned.indexOf('[');
+  const end = cleaned.lastIndexOf(']');
+  if(start !== -1 && end !== -1 && end > start){
+    try{ const r = coerce(JSON.parse(cleaned.slice(start, end + 1))); if(r) return r; } catch(e){}
+  }
+  return null;
+}
+
+function finishLLMExtraction(raw, text, runBtn, errEl, statEl, truncated){
+  const items = extractJsonArray(raw);
+  if(!items){
+    console.log('Raw model output that failed to parse:', raw);
+    const debugCard = document.getElementById('debugCard');
+    const debugRaw = document.getElementById('debugRaw');
+    if(raw){
+      debugCard.style.display = 'block';
+      debugRaw.textContent = raw;
+      errEl.textContent = truncated
+        ? 'Response was cut off before finishing (hit the output token limit) \u2014 partial response shown below. Click Extract again.'
+        : 'Could not parse model output as JSON \u2014 raw response shown below.';
+    } else {
+      debugCard.style.display = 'none';
+      errEl.textContent = 'Model returned an empty response. Click Extract again.';
+    }
+    statEl.textContent = '';
+    runBtn.disabled = false;
+    return;
+  }
+  document.getElementById('debugCard').style.display = 'none';
+
+  const grounded = [];
+  const discarded = [];
+  items.forEach(it => {
+    const cls = TYPE_MAP[(it.type || '').toLowerCase()] || 'dx';
+    const sentence = (it.sentence || '').trim();
+    const sentenceFound = sentence && text.toLowerCase().includes(sentence.toLowerCase());
+    const termIdx = sentenceFound ? text.toLowerCase().indexOf((it.term||'').toLowerCase()) : -1;
+    const entry = {
+      start: termIdx, end: termIdx >=0 ? termIdx + (it.term||'').length : -1,
+      text: it.term || '', cls, typeLabel: TYPE_LABEL[cls],
+      sentence, qualifier: it.qualifier || null, grounded: sentenceFound && termIdx >= 0,
+    };
+    if(entry.grounded) grounded.push(entry); else discarded.push(entry);
+  });
+  grounded.sort((a,b) => a.start - b.start);
+  renderMatches(grounded, text, discarded);
+  runBtn.disabled = false;
+}
+
+function renderMatches(matches, text, discarded){
+  discarded = discarded || [];
+  const out = document.getElementById('highlighted');
+  const findingsEl = document.getElementById('findings');
+  const statEl = document.getElementById('stat');
+  const groundbar = document.getElementById('groundbar');
+
+  let html = '';
+  let cursor = 0;
+  let citeIndex = 0;
+  matches.forEach(m => {
+    if(m.start < cursor || m.start < 0) return;
+    html += escapeHtml(text.slice(cursor, m.start));
+    citeIndex++;
+    html += `<mark class="${m.cls}">${escapeHtml(m.text)}</mark><sup class="cite">[${citeIndex}]</sup>`;
+    cursor = m.end;
+  });
+  html += escapeHtml(text.slice(cursor));
+  out.innerHTML = html || escapeHtml(text);
+
+  const allRows = matches.map((m,i) => renderFinding(m, i+1, false)).join('')
+    + discarded.map(m => renderFinding(m, null, true)).join('');
+  findingsEl.innerHTML = allRows || '<div class="empty">No findings returned.</div>';
+
+  const flagged = matches.filter(m => m.qualifier).length;
+  statEl.textContent = `${matches.length} finding${matches.length===1?'':'s'} \u00b7 ${flagged} flagged for review`;
+  groundbar.textContent = discarded.length
+    ? `Grounding check: ${matches.length} verified against source text, ${discarded.length} discarded (not found verbatim in the note)`
+    : (mode === 'llm' ? `Grounding check: all ${matches.length} findings verified against source text` : '');
+}
+
+function renderFinding(m, num, isDiscarded){
+  return `
+    <div class="finding ${m.qualifier ? 'warn' : ''} ${isDiscarded ? 'discard' : ''}">
+      <div class="top">
+        <span class="term">${escapeHtml(m.text)}</span>
+        <span class="type">${m.typeLabel}${num ? ' \u00b7 [' + num + ']' : ''}</span>
+      </div>
+      <div class="evidence">${escapeHtml(m.sentence || '(no source sentence returned)')}</div>
+      ${m.qualifier ? `<span class="badge">qualifier: "${escapeHtml(m.qualifier)}" \u2014 verify before coding</span>` : ''}
+      ${isDiscarded ? `<span class="badge bad">discarded: not found verbatim in note</span>` : ''}
+    </div>
+  `;
+}
+</script>
+</body>
+</html>
